@@ -33,43 +33,115 @@ py -3.14 -m class_vii check
 python -m pip install ".[all]"
 ```
 
-## Configure
+## Quick start (Windows + Python 3.14)
 
-```bash
-cp config/config.example.json config/config.json
+This is the simple workflow: install once, prepare your Shoonya settings and
+Excel workbook, then start the terminal with **one command**.
+
+### 1. Install CLASS_VII
+
+Open CMD and run:
+
+```bat
+mkdir C:\CLASS_VII
+cd /d C:\CLASS_VII
+py -3.14 -m pip install --upgrade "class-vii[all] @ git+https://github.com/ferozmd53/CLASS_VII.git"
 ```
 
-Fill `config/config.json` — it is git-ignored, and the loader refuses to start
-with fields missing. Prefer environment variables in CI:
+Git for Windows must be installed and available on PATH.
 
-```bash
-export CLASS_VII_USER_ID=FA12345
-export CLASS_VII_PASSWORD=...
-export CLASS_VII_TOTP_SECRET=...      # base32 secret, or a 6-digit pin
-export CLASS_VII_VENDOR_CODE=FA12345_U
-export CLASS_VII_API_SECRET=...
+### 2. Download the two starter files
+
+Run these commands in the same CMD window:
+
+```bat
+curl.exe -L https://raw.githubusercontent.com/ferozmd53/CLASS_VII/main/run.py -o run.py
+curl.exe -L https://raw.githubusercontent.com/ferozmd53/CLASS_VII/main/config/config.example.json -o config.json
 ```
 
-`paper_trade` defaults to **true**: orders are simulated and logged, never sent.
+### 3. Enter your Shoonya credentials
 
-## Run
+Open `C:\CLASS_VII\config.json` in Notepad and replace the sample values:
 
-```bash
-python -m class_vii check       # offline self-test, no broker, no Excel
-python -m class_vii login       # verify credentials, print account summary
-python -m class_vii scan        # live multi-symbol indicator scanner
-python -m class_vii scan --excel --seconds 600
-python -m class_vii terminal    # Excel trade terminal (reads the .xlsm)
-python -m class_vii chain --symbol NIFTY --strikes 10
+- `user_id`: your Shoonya client ID
+- `password`: your Shoonya password
+- `totp_secret`: your base32 TOTP secret (or the supported 6-digit PIN)
+- `vendor_code`: your Shoonya vendor code
+- `api_secret`: your Shoonya API secret
+
+Keep `login_method` as `NEW_SESSION` for normal password + TOTP login.
+Do not post this file or commit it to GitHub.
+
+### 4. Put your Excel workbook beside run.py
+
+Copy `Finvasia_Trade_Terminal_v3.xlsm` into `C:\CLASS_VII\`, so the folder
+contains:
+
+```text
+C:\CLASS_VII\
+    run.py
+    config.json
+    Finvasia_Trade_Terminal_v3.xlsm
 ```
 
-`terminal` expects the original workbook name (`Finvasia_Trade_Terminal_v3.xlsm`)
-or `--workbook <path>`. It reads `Symbol | Qty | BUY/SELL | Target | SL | Trail`
-rows on the `Trade_Terminal` sheet and writes status / latest SL / PnL back, plus
-the `OrderBook` and `OpenPosition` sheets.
+The workbook must use the expected terminal layout, including the
+`Trade_Terminal`, `OrderBook` and `OpenPosition` sheets. If your workbook has
+a different filename, edit the `WORKBOOK` line near the top of `run.py`.
+
+### 5. Start the Excel terminal
+
+```bat
+cd /d C:\CLASS_VII
+py -3.14 run.py
+```
+
+That is the normal start command. The script logs in to Shoonya and opens the
+Excel terminal. Keep Excel available while it runs; press **Ctrl+C** in CMD to
+stop it.
+
+### Minimal run.py example
+
+The repository includes this small launcher. You do not need to write it
+yourself when you download it in step 2:
+
+```python
+from pathlib import Path
+from class_vii.__main__ import main
+
+ROOT = Path(__file__).resolve().parent
+
+if __name__ == "__main__":
+    raise SystemExit(main([
+        "--config", str(ROOT / "config.json"),
+        "terminal",
+        "--workbook", str(ROOT / "Finvasia_Trade_Terminal_v3.xlsm"),
+    ]))
+```
+
+### Other commands (optional)
+
+Run these from CMD after installation:
+
+```bat
+py -3.14 -m class_vii --version
+py -3.14 -m class_vii check
+py -3.14 -m class_vii --config config.json login
+py -3.14 -m class_vii --config config.json scan
+py -3.14 -m class_vii --config config.json scan --excel --seconds 600
+py -3.14 -m class_vii --config config.json chain --symbol NIFTY --strikes 10
+```
+
+`check` is an offline self-test. `login` verifies the Shoonya connection.
+`scan` runs the live multi-symbol scanner; set the symbols in
+`config.json` under `scanner.symbols`. `chain` prints an option-chain
+snapshot.
+
+**Safety:** `paper_trade` is `true` in the starter config. Keep it true
+while testing; orders are simulated. Do not switch to live order placement
+until you have checked the workbook, quantities, product type and order logic.
 
 ---
-
+ 
 ## Structure
 
 ```
