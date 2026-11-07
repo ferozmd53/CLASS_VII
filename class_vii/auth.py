@@ -54,8 +54,10 @@ class ShoonyaSession:
         self,
         credentials: S.Credentials,
         logger: Optional[logging.Logger] = None,
+        auth_code_callback=None,
     ) -> None:
         self.credentials = credentials
+        self.auth_code_callback = auth_code_callback
         self.log = logger or logging.getLogger("class_vii.auth")
         self.api: Any = None
         self.client_name = ""
@@ -70,17 +72,17 @@ class ShoonyaSession:
         """Authenticate once; a consumed OAuth code must never be retried."""
         self.credentials.validate()
         method = self.credentials.login_method.upper()
-        if method not in {"NEW_SESSION", "OAUTH", "TOKEN"}:
-            raise LoginError(f"unsupported login method: {method}")
+        if method not in {"NEW_SESSION", "OAUTH"}:
+            raise LoginError(
+                "Only fresh OAuth login is enabled. Set User_Credential!B4 to New_Session; "
+                "saved session tokens are cleared and never reused."
+            )
 
         last_error: Optional[Exception] = None
         for attempt in range(1, max(1, retries) + 1):
             try:
                 self.api = self._build_api()
-                if method in {"NEW_SESSION", "OAUTH"}:
-                    self._login_oauth()
-                else:
-                    self._login_token()
+                self._login_oauth()
                 self._connected = True
                 self.log.info("Shoonya OAuth session established for %s", self.credentials.user_id)
                 return self.api
@@ -200,6 +202,12 @@ class ShoonyaSession:
         # Authorization codes are short-lived and single-use. Always obtain a
         # fresh code; never reuse the old B10 value from a previous run.
         auth_code = self._capture_auth_code()
+        if self.auth_code_callback is not None:
+            try:
+                self.auth_code_callback(auth_code)
+                self.log.info("Fresh one-time AUTH_CODE saved to User_Credential!B10 (not reused)")
+            except Exception as exc:
+                raise LoginError("Could not save the fresh AUTH_CODE to User_Credential!B10") from exc
         try:
             result = self.api.getAccessToken(
                 auth_code,
