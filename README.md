@@ -72,10 +72,14 @@ Enter your Shoonya details in the existing `User_Credential` worksheet:
 | B8 | Existing session token (legacy TOKEN method only) |
 | B10 | Not used; OAuth codes are captured fresh and are single-use |
 
-For `New_Session` or `OAUTH`, fill B2:B7. The launcher opens Shoonya's hosted
-OAuth login in Chrome, captures a fresh one-time code, exchanges it for a session,
-and then starts the terminal. B10 is not reused. The Client ID's public IP must
-be whitelisted in Shoonya API Key Generation. For `TOKEN`, fill B2, B4 and B8.
+Set B4 to `New_Session` (recommended) or `OAUTH`, and fill B2:B7. At startup,
+the launcher opens the workbook visibly in desktop Excel, clears B8 and the old
+B10 value, detects the current public IP and saves it to B11. It then opens
+Shoonya's hosted OAuth login in Chrome, saves the newly captured one-time code
+to B10 for reference, exchanges it for a fresh session, and starts the terminal.
+B10 is never read or reused; B8 is always cleared and never used. TOKEN mode is
+disabled. The Client ID's current public IP must be whitelisted in Shoonya API
+Key Generation.
 Keep these credentials private; do not commit your filled workbook to GitHub.
 
 ### 4. Start the terminal
