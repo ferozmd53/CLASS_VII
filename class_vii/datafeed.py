@@ -140,8 +140,10 @@ class MarketFeed:
         """
         instruments: List[str] = []
         seen = set()
+        total_input = 0
 
         for raw in symbols:
+            total_input += 1
             try:
                 if isinstance(raw, dict):
                     exch = raw.get("exchange") or raw.get("e") or exchange
@@ -194,7 +196,7 @@ class MarketFeed:
 
         self.log.info(
             "websocket subscriptions: %s succeeded, %s failed, %s unresolved/skipped",
-            len(subscribed), len(failed), len(symbols) - len(instruments)
+            len(subscribed), len(failed), total_input - len(instruments)
         )
         return subscribed
 
