@@ -1,9 +1,8 @@
-"""Market data: websocket quotes (repo 1 + repo 2) and daily history (repo 2).
+"""Shoonya websocket market data and daily history.
 
-repo 2 called ``api.subscribe(["NSE|2885", ...])`` - a list of strings, which
-NorenApi cannot accept (it needs ``[{"exchange": "NSE", "token": "2885"}]``)
-inside a ``try/except: pass``, so its live feed never actually subscribed.
-This module builds the payload the API documents and verifies the result.
+NorenApi.subscribe() and unsubscribe() expect instrument keys such as
+"NSE|2885" (strings). Passing dictionaries causes the websocket client's
+'expected str instance, dict found' error and prevents all live ticks.
 """
 from __future__ import annotations
 
@@ -134,7 +133,7 @@ class MarketFeed:
     def subscribe(self, symbols: Iterable[str], exchange: Optional[str] = None,
                   master: Optional[InstrumentMaster] = None) -> List[str]:
         """Subscribe symbols; returns the tokens that were accepted."""
-        instruments: List[dict] = []
+        instruments: List[str] = []
         accepted: List[str] = []
         for raw in symbols:
             exch, rest = parse_symbol(raw) if exchange is None else (exchange, raw)
@@ -145,31 +144,40 @@ class MarketFeed:
             if not token:
                 self.log.warning("cannot resolve %s:%s to a token", exch, rest)
                 continue
-            instruments.append({"exchange": exch, "token": token})
+            instruments.append(f"{exch}|{token}")
             accepted.append(f"{exch}|{token}")
             with self._lock:
                 self.quotes.setdefault(f"{exch}|{token}", Quote())
 
+        subscribed: List[str] = []
         for chunk in _chunks(instruments, 10):
             try:
-                if isinstance(chunk[0], dict):
-                    self.api.subscribe(chunk)
-                else:  # pragma: no cover - defensive
-                    self.api.subscribe(chunk)
-                self._subscribed.extend((i["exchange"], i["token"]) for i in chunk)
+                # Shoonya NorenApi expects ["NSE|2885", ...], not dictionaries.
+                self.api.subscribe(chunk)
+                subscribed.extend(chunk)
+                self._subscribed.extend(
+                    tuple(item.split("|", 1)) for item in chunk
+                )
             except Exception as exc:  # noqa: BLE001
-                # Loud, not silent: this is exactly the failure repo 2 hid.
                 self.log.error("subscribe failed for %s: %s", chunk, exc)
             time.sleep(0.1)
 
-        self.log.info("subscribed %s/%s instruments", len(accepted), len(symbols))
-        return accepted
+        self.log.info(
+            "websocket subscription accepted %s/%s resolved instruments",
+            len(subscribed), len(instruments)
+        )
+        if len(instruments) != len(accepted):
+            self.log.warning(
+                "resolved instrument count mismatch: %s accepted keys / %s instruments",
+                len(accepted), len(instruments)
+            )
+        return subscribed
 
     def unsubscribe_all(self) -> None:
         pairs = list(self._subscribed)
         self._subscribed.clear()
         for chunk in _chunks(pairs, 10):
-            payload = [{"exchange": exch, "token": token} for exch, token in chunk]
+            payload = [f"{exch}|{token}" for exch, token in chunk]
             try:
                 self.api.unsubscribe(payload)
             except Exception as exc:  # noqa: BLE001
@@ -189,7 +197,7 @@ class MarketFeed:
         # Shoonya drops subscriptions on reconnect - replay them.
         if self._subscribed:
             self.log.info("re-subscribing %s instruments", len(self._subscribed))
-            payload = [{"exchange": e, "token": t} for e, t in self._subscribed]
+            payload = [f"{e}|{t}" for e, t in self._subscribed]
             for chunk in _chunks(payload, 10):
                 try:
                     self.api.subscribe(chunk)
