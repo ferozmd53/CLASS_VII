@@ -197,3 +197,22 @@ def test_broker_snapshots_are_read_in_paper_mode():
     assert gateway.positions()[0]["netqty"] == "5"
     assert gateway.holdings()[0]["holdqty"] == "5"
     assert gateway.limits()["cash"] == "1000"
+
+
+def test_workbook_template_has_required_sheets_and_refuses_overwrite(tmp_path):
+    from openpyxl import load_workbook
+    from class_vii.workbook_template import create_workbook
+    path = tmp_path / "CLASS_VII_Terminal.xlsx"
+    create_workbook(path)
+    wb = load_workbook(path, read_only=True)
+    assert {"Dashboard", "Watchlist", "LiveIndicators", "Trade_Terminal",
+            "OrderBook", "OpenPosition", "BrokerPositions", "Holdings",
+            "Funds", "Alerts", "User_Credential"}.issubset(set(wb.sheetnames))
+    assert wb["Trade_Terminal"]["A3"].value == "Symbol"
+    wb.close()
+    try:
+        create_workbook(path)
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("template initializer overwrote an existing workbook")
