@@ -79,6 +79,26 @@ class SymbolScanner:
             return None
 
         self.ticks += 1
+        now = datetime.now()
+
+        # Always publish live quote fields, even when historical candles are
+        # unavailable (common for newly listed/expired option contracts).
+        # Indicator calculation is optional; LTP must never depend on history.
+        previous = self.snapshots.get(symbol, {})
+        live_open = _number(previous.get("open")) or ltp
+        live_high = max(_number(previous.get("high")) or ltp, ltp)
+        live_low = min(_number(previous.get("low")) or ltp, ltp)
+        live_snapshot = dict(previous)
+        live_snapshot.update({
+            "ltp": ltp,
+            "open": live_open,
+            "high": live_high,
+            "low": live_low,
+            "close": ltp,
+            "updated_at": now,
+        })
+        self.snapshots[symbol] = live_snapshot
+
         payload = self.history.cache.get(symbol)
         if not payload:
             return None
@@ -86,7 +106,6 @@ class SymbolScanner:
         # This cache contains DAILY candles. Update the forming daily candle;
         # never append each incoming tick as a separate historical bar.
         frame = payload["frame"].copy()
-        now = datetime.now()
         today = now.date()
         last_day = pd.to_datetime(frame["datetime"].iloc[-1]).date()
         if last_day != today:
@@ -143,7 +162,15 @@ class SymbolScanner:
 
         return signal or None
 
-    def _symbol_for_key(self, key: str) -> Optional[str]:
+    def _number(value) -> float:
+    try:
+        number = float(value)
+        return number if pd.notna(number) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _symbol_for_key(self, key: str) -> Optional[str]:
         for symbol, symbol_key in self.keys.items():
             if symbol_key == key:
                 return symbol
