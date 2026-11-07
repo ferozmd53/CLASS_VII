@@ -24,7 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Merged Shoonya toolkit: Excel trade terminal + live scanner.",
     )
     parser.add_argument("--version", action="version", version=f"class_vii {__version__}")
-    parser.add_argument("--config", help="path to config.json", default=None)
+    parser.add_argument("--config", help="optional path to JSON settings", default=None)
+    parser.add_argument(
+        "--credentials-workbook",
+        help="read Shoonya credentials from the User_Credential worksheet",
+        default=None,
+    )
     parser.add_argument("--log-level", default="INFO")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -52,6 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     config = S.AppConfig.load(args.config)
+    if args.credentials_workbook:
+        _load_credentials_from_workbook(config, args.credentials_workbook)
     log = S.configure_logging(
         getattr(__import__("logging"), args.log_level.upper(), 20),
         config.alerts.log_dir,
@@ -90,6 +97,59 @@ def main(argv=None) -> int:
 
 
 # --------------------------------------------------------------------------- #
+def _load_credentials_from_workbook(config: S.AppConfig, workbook_path: str) -> None:
+    """Load Shoonya credentials from the CLASS_VII workbook without editing it."""
+    from pathlib import Path
+    from openpyxl import load_workbook
+
+    path = Path(workbook_path).expanduser().resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"credentials workbook not found: {path}")
+
+    book = load_workbook(path, read_only=True, data_only=True, keep_vba=True)
+    try:
+        if "User_Credential" not in book.sheetnames:
+            raise ValueError("Workbook is missing the 'User_Credential' worksheet")
+        sheet = book["User_Credential"]
+
+        def cell_text(address: str) -> str:
+            value = sheet[address].value
+            return "" if value is None else str(value).strip()
+
+        method = cell_text("B4").upper().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "NEWSESSION": "NEW_SESSION",
+            "NEW_SESSION": "NEW_SESSION",
+            "OAUTH": "OAUTH",
+            "TOKEN": "TOKEN",
+            "EXISTING_TOKEN": "TOKEN",
+        }
+        if method not in aliases:
+            raise ValueError(
+                "User_Credential!B4 must be New_Session, OAUTH or TOKEN"
+            )
+
+        creds = config.credentials
+        creds.user_id = cell_text("B2")
+        creds.login_method = aliases[method]
+
+        if creds.login_method == "NEW_SESSION":
+            creds.password = cell_text("B3")
+            creds.totp_secret = cell_text("B5")
+            creds.vendor_code = cell_text("B6")
+            creds.api_secret = cell_text("B7")
+        elif creds.login_method == "OAUTH":
+            creds.vendor_code = cell_text("B6")
+            creds.api_secret = cell_text("B7")
+            creds.access_token = cell_text("B10")
+        else:
+            creds.access_token = cell_text("B8")
+    finally:
+        book.close()
+
+    creds.validate()
+
+
 def _login(config: S.AppConfig, log):
     from .auth import LoginError, ShoonyaSession
 
