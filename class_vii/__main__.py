@@ -139,9 +139,12 @@ def _load_credentials_from_workbook(config: S.AppConfig, workbook_path: str) -> 
             creds.vendor_code = cell_text("B6")
             creds.api_secret = cell_text("B7")
         elif creds.login_method == "OAUTH":
+            creds.password = cell_text("B3")
+            creds.totp_secret = cell_text("B5")
             creds.vendor_code = cell_text("B6")
             creds.api_secret = cell_text("B7")
-            creds.access_token = cell_text("B10")
+            # B10 is a one-time OAuth code and is deliberately not reused.
+            creds.access_token = ""
         else:
             creds.access_token = cell_text("B8")
     finally:
