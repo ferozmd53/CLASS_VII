@@ -35,86 +35,79 @@ python -m pip install ".[all]"
 
 ## Quick start (Windows + Python 3.14)
 
-This is the simple workflow: install once, prepare your Shoonya settings and
-Excel workbook, then start the terminal with **one command**.
+The normal workflow uses **CLASS_VII.xlsm for Shoonya credentials**. No
+`config.json` file is required.
 
 ### 1. Install CLASS_VII
 
 Open CMD and run:
 
 ```bat
-mkdir C:\CLASS_VII
-cd /d C:\CLASS_VII
+mkdir C:\\CLASS_VII
+cd /d C:\\CLASS_VII
 py -3.14 -m pip install --upgrade "class-vii[all] @ git+https://github.com/ferozmd53/CLASS_VII.git"
 ```
 
 Git for Windows must be installed and available on PATH.
 
-### 2. Download the two starter files
-
-Run these commands in the same CMD window:
+### 2. Download the launcher
 
 ```bat
 curl.exe -L https://raw.githubusercontent.com/ferozmd53/CLASS_VII/main/run.py -o run.py
-curl.exe -L https://raw.githubusercontent.com/ferozmd53/CLASS_VII/main/config/config.example.json -o config.json
 ```
 
-### 3. Enter your Shoonya credentials
+### 3. Add credentials to the Excel workbook
 
-Open `C:\CLASS_VII\config.json` in Notepad and replace the sample values:
+Put your workbook named **`CLASS_VII.xlsm`** in `C:\\CLASS_VII\\`.
+Enter your Shoonya details in the existing `User_Credential` worksheet:
 
-- `user_id`: your Shoonya client ID
-- `password`: your Shoonya password
-- `totp_secret`: your base32 TOTP secret (or the supported 6-digit PIN)
-- `vendor_code`: your Shoonya vendor code
-- `api_secret`: your Shoonya API secret
+| Cell | Field |
+|---|---|
+| B2 | Shoonya User ID |
+| B3 | Password |
+| B4 | Login method: `New_Session`, `OAUTH` or `TOKEN` |
+| B5 | TOTP secret / supported 6-digit PIN (New_Session) |
+| B6 | Vendor code |
+| B7 | API secret |
+| B8 | Existing session token (TOKEN method) |
+| B10 | OAuth auth code (OAUTH method) |
 
-Keep `login_method` as `NEW_SESSION` for normal password + TOTP login.
-Do not post this file or commit it to GitHub.
+For `New_Session`, fill B2:B7 as applicable. For `OAUTH`, fill B2, B4, B6, B7
+and B10. For `TOKEN`, fill B2, B4 and B8. Keep these credentials private;
+do not commit your filled workbook to GitHub.
 
-### 4. Put your Excel workbook beside run.py
+### 4. Start the terminal
 
-Copy `Finvasia_Trade_Terminal_v3.xlsm` into `C:\CLASS_VII\`, so the folder
-contains:
+Keep these two files in the same folder:
 
 ```text
-C:\CLASS_VII\
+C:\\CLASS_VII\\
     run.py
-    config.json
-    Finvasia_Trade_Terminal_v3.xlsm
+    CLASS_VII.xlsm
 ```
 
-The workbook must use the expected terminal layout, including the
-`Trade_Terminal`, `OrderBook` and `OpenPosition` sheets. If your workbook has
-a different filename, edit the `WORKBOOK` line near the top of `run.py`.
-
-### 5. Start the Excel terminal
+Run:
 
 ```bat
-cd /d C:\CLASS_VII
 py -3.14 run.py
 ```
 
-That is the normal start command. The script logs in to Shoonya and opens the
-Excel terminal. Keep Excel available while it runs; press **Ctrl+C** in CMD to
-stop it.
+The launcher reads credentials from `User_Credential` and starts the terminal
+using that same workbook. It does not create or require `config.json`.
 
-### Minimal run.py example
-
-The repository includes this small launcher. You do not need to write it
-yourself when you download it in step 2:
+### Minimal run.py
 
 ```python
 from pathlib import Path
 from class_vii.__main__ import main
 
-ROOT = Path(__file__).resolve().parent
+WORKBOOK = Path(__file__).resolve().parent / "CLASS_VII.xlsm"
 
 if __name__ == "__main__":
     raise SystemExit(main([
-        "--config", str(ROOT / "config.json"),
+        "--credentials-workbook", str(WORKBOOK),
         "terminal",
-        "--workbook", str(ROOT / "Finvasia_Trade_Terminal_v3.xlsm"),
+        "--workbook", str(WORKBOOK),
     ]))
 ```
 
@@ -125,15 +118,15 @@ Run these from CMD after installation:
 ```bat
 py -3.14 -m class_vii --version
 py -3.14 -m class_vii check
-py -3.14 -m class_vii --config config.json login
-py -3.14 -m class_vii --config config.json scan
-py -3.14 -m class_vii --config config.json scan --excel --seconds 600
-py -3.14 -m class_vii --config config.json chain --symbol NIFTY --strikes 10
+py -3.14 -m class_vii login
+py -3.14 -m class_vii scan
+py -3.14 -m class_vii scan --excel --seconds 600
+py -3.14 -m class_vii chain --symbol NIFTY --strikes 10
 ```
 
 `check` is an offline self-test. `login` verifies the Shoonya connection.
 `scan` runs the live multi-symbol scanner; set the symbols in
-`config.json` under `scanner.symbols`. `chain` prints an option-chain
+optional JSON settings under `scanner.symbols`. `chain` prints an option-chain
 snapshot.
 
 **Safety:** `paper_trade` is `true` in the starter config. Keep it true
@@ -173,7 +166,7 @@ class_vii/
 and read cells `B2..B8`; repo 2 scraped an OAuth code from a Selenium window into
 `B7` and called `getAccessToken`. They cannot both own the session. `auth.py`
 supports both methods plus plain `susertoken` reuse, selected by
-`credentials.login_method`, with retry/backoff and no Excel dependency.
+`credentials.login_method`, with retry/backoff. The main launcher reads credentials from `User_Credential` in `CLASS_VII.xlsm`.
 
 **Credentials.** repo 1 printed the userid, password and api_secret straight to
 console *and* to the log file
