@@ -254,17 +254,33 @@ class ExcelTerminal:
     # ------------------------------------------------------------------ #
     def loop(self, gateway, interval: Optional[float] = None, scanner=None) -> None:
         interval = interval or self.config.poll_interval
+        last_feed_report = 0.0
         while True:
             try:
                 self.sync()
-                self.publish()
-                self.publish_orderbook(gateway)
-                self.publish_positions(gateway)
-                self.publish_account_snapshots(gateway)
+
+                # Publish market data before broker REST snapshots. A slow or
+                # failed order/position/holdings request must not block LTP.
                 if scanner is not None:
                     live = self.live_sheet or self.book.sheet("LiveIndicators")
                     live.range("A1:Z1001").clear_contents()
                     self.book.write_frame(live, scanner.frame(), first_row=1, first_col="A")
+                    now = time.monotonic()
+                    if now - last_feed_report >= 15:
+                        live_count = sum(
+                            1 for value in scanner.snapshots.values()
+                            if float(value.get("ltp", 0) or 0) > 0
+                        )
+                        self.log.info(
+                            "live feed status: received_ticks=%s, tracked_symbols=%s, symbols_with_ltp=%s",
+                            scanner.ticks, len(scanner.keys), live_count
+                        )
+                        last_feed_report = now
+
+                self.publish()
+                self.publish_orderbook(gateway)
+                self.publish_positions(gateway)
+                self.publish_account_snapshots(gateway)
                 self.book.save()
             except KeyboardInterrupt:
                 self.log.info("terminal stopped by user")
