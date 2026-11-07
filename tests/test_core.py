@@ -216,3 +216,36 @@ def test_workbook_template_has_required_sheets_and_refuses_overwrite(tmp_path):
         pass
     else:
         raise AssertionError("template initializer overwrote an existing workbook")
+
+def test_market_feed_skips_invalid_and_continues_after_failed_batch():
+    import logging
+    from class_vii.datafeed import MarketFeed
+
+    class FakeApi:
+        def __init__(self):
+            self.calls = []
+        def subscribe(self, instruments):
+            assert all(isinstance(item, str) for item in instruments)
+            self.calls.append(list(instruments))
+            if len(self.calls) == 1:
+                raise RuntimeError("simulated batch failure")
+
+    class FakeMaster:
+        def token_for(self, exchange, symbol):
+            return None
+
+    api = FakeApi()
+    feed = MarketFeed(api, logger=logging.getLogger("test.feed"))
+    symbols = [
+        {"exchange": "NSE", "token": str(7000 + i)}
+        for i in range(10)
+    ]
+    symbols.extend(["NSE|7999", "MCX:NATURALGAS28MAR23"])
+    subscribed = feed.subscribe(symbols, master=FakeMaster())
+
+    assert len(api.calls) == 2
+    assert api.calls[0] == [f"NSE|{7000 + i}" for i in range(10)]
+    assert api.calls[1] == ["NSE|7999"]
+    assert subscribed == ["NSE|7999"]
+    assert all(isinstance(item, str) for item in subscribed)
+
