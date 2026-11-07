@@ -258,13 +258,21 @@ class ExcelTerminal:
         while True:
             try:
                 self.sync()
+            except KeyboardInterrupt:
+                self.log.info("terminal stopped by user")
+                return
+            except Exception as exc:  # noqa: BLE001
+                self.log.exception("terminal input sync failed: %s", exc)
 
-                # Publish market data before broker REST snapshots. A slow or
-                # failed order/position/holdings request must not block LTP.
-                if scanner is not None:
+            # Market data has priority. Do not let a busy Excel sheet or a
+            # failed broker REST request prevent the live quote sheet saving.
+            if scanner is not None:
+                try:
                     live = self.live_sheet or self.book.sheet("LiveIndicators")
-                    live.range("A1:Z1001").clear_contents()
+                    # The scanner has a stable symbol set; overwrite its used
+                    # block instead of clearing 1,000 rows on every cycle.
                     self.book.write_frame(live, scanner.frame(), first_row=1, first_col="A")
+                    self.book.save()
                     now = time.monotonic()
                     if now - last_feed_report >= 15:
                         live_count = sum(
@@ -276,17 +284,26 @@ class ExcelTerminal:
                             scanner.ticks, len(scanner.keys), live_count
                         )
                         last_feed_report = now
+                except Exception as exc:  # noqa: BLE001
+                    self.log.exception("live Excel update failed: %s", exc)
 
-                self.publish()
-                self.publish_orderbook(gateway)
-                self.publish_positions(gateway)
-                self.publish_account_snapshots(gateway)
-                self.book.save()
-            except KeyboardInterrupt:
-                self.log.info("terminal stopped by user")
-                return
-            except Exception as exc:  # noqa: BLE001 - workbook calls are fragile
-                self.log.exception("terminal cycle failed: %s", exc)
+            # Keep broker/account sheets independent. Excel can temporarily
+            # reject COM calls with OLE 0x800AC472 while the user is editing.
+            for label, operation in (
+                ("trade terminal publish", self.publish),
+                ("order book refresh", lambda: self.publish_orderbook(gateway)),
+                ("positions refresh", lambda: self.publish_positions(gateway)),
+                ("holdings/funds refresh", lambda: self.publish_account_snapshots(gateway)),
+            ):
+                try:
+                    operation()
+                except KeyboardInterrupt:
+                    self.log.info("terminal stopped by user")
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    self.log.warning("%s skipped this cycle: %s", label, exc)
+
+            self.book.save()
             time.sleep(interval)
 
 
