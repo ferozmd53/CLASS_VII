@@ -125,13 +125,13 @@ py -3.14 -m class_vii chain --symbol NIFTY --strikes 10
 ```
 
 `check` is an offline self-test. `login` verifies the Shoonya connection.
-`scan` runs the live multi-symbol scanner; set the symbols in
-optional JSON settings under `scanner.symbols`. `chain` prints an option-chain
-snapshot.
+`scan` runs the live multi-symbol scanner; pass symbols with `--symbols`, for
+example `py -3.14 -m class_vii scan --symbols NSE:RELIANCE-EQ NSE:HCLTECH-EQ`.
+`chain` prints an option-chain snapshot.
 
-**Safety:** `paper_trade` is `true` in the starter config. Keep it true
-while testing; orders are simulated. Do not switch to live order placement
-until you have checked the workbook, quantities, product type and order logic.
+**Safety:** `paper_trade` defaults to `true` in the package settings, so orders
+are simulated by default. Do not enable live order placement until you have
+checked the workbook, quantities, product type and order logic.
 
 ---
  
