@@ -1,17 +1,6 @@
 # class_vii
 
-Merged Shoonya (Finvasia) trading toolkit. It combines two open-source projects
-that both talk to the same broker API (**NorenRestApi**) into one package with a
-single login, a single config file and one set of dependencies.
 
-| Source | What was taken | License |
-| --- | --- | --- |
-| [PythonTraderExcelTradeTerminal](https://github.com/Indian-Algorithmic-Trading-Community/PythonTraderExcelTradeTerminal) — `Finvasia/` | Excel trade terminal, order book / open position / holdings sheets, target-SL-trailing engine, Telegram + voice alerts, option chain (incl. Pro variant) | Apache-2.0 OR MIT |
-| [Shoonya-Multi-Symbol-Live-Historical-Data-with-Indicators](https://github.com/ferozmd53/Shoonya-Multi-Symbol-Live-Historical-Data-with-Indicators) | multi-symbol websocket feed, daily historical loader, TradingView-matching RSI / StochRSI / Bollinger Bands, extreme-reversal signal | MIT |
-
-Both are credited in `NOTICE.md`. Nothing here is a copy-paste merge: the two
-codebases were reconciled (see *What changed* below), because side by side they
-conflict on login, on the websocket payload and on the Excel layout.
 
 ---
 
