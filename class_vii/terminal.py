@@ -58,15 +58,45 @@ class ExcelTerminal:
         self.config = trading
         self.log = logger or logging.getLogger("class_vii.terminal")
         self.sheet = None
+        self.live_sheet = None
 
     # ------------------------------------------------------------------ #
     def attach(self) -> "ExcelTerminal":
-        required = (TERMINAL_SHEET, ORDERBOOK_SHEET, POSITION_SHEET,
-                    "BrokerPositions", "LiveIndicators", "Holdings", "Funds", "Alerts")
+        """Attach to the user's workbook without replacing or rearranging it.
+
+        Trade_Terminal, OrderBook, OpenPosition and Holdings are existing
+        operational sheets and must already be present. Output-only sheets
+        are added only when absent. An existing legacy "Live" sheet is reused
+        for live indicators rather than creating a duplicate tab.
+        """
         names = [s.name for s in self.book._book.sheets]
+        required = (TERMINAL_SHEET, ORDERBOOK_SHEET, POSITION_SHEET, "Holdings")
         missing = [name for name in required if name not in names]
         if missing:
-            raise KeyError("Workbook missing CLASS_VII sheets: " + ", ".join(missing))
+            raise KeyError(
+                "Workbook is missing required trading sheets: " + ", ".join(missing)
+                + ". Existing sheets were not changed."
+            )
+
+        # Create only missing output tabs; never clear, rename or replace
+        # any existing worksheet, formulas, macros or credential cells.
+        for name in ("BrokerPositions", "Funds", "Alerts"):
+            if name not in names:
+                self.book._book.sheets.add(name, after=self.book._book.sheets[-1])
+                names.append(name)
+                self.log.info("created missing output worksheet: %s", name)
+
+        if "LiveIndicators" in names:
+            self.live_sheet = self.book.sheet("LiveIndicators")
+        elif "Live" in names:
+            self.live_sheet = self.book.sheet("Live")
+            self.log.info("using existing Live worksheet for live indicator output")
+        else:
+            self.live_sheet = self.book._book.sheets.add(
+                "LiveIndicators", after=self.book._book.sheets[-1]
+            )
+            self.log.info("created missing output worksheet: LiveIndicators")
+
         self.sheet = self.book.sheet(TERMINAL_SHEET)
         return self
 
@@ -232,7 +262,7 @@ class ExcelTerminal:
                 self.publish_positions(gateway)
                 self.publish_account_snapshots(gateway)
                 if scanner is not None:
-                    live = self.book.sheet("LiveIndicators")
+                    live = self.live_sheet or self.book.sheet("LiveIndicators")
                     live.range("A1:Z1001").clear_contents()
                     self.book.write_frame(live, scanner.frame(), first_row=1, first_col="A")
                 self.book.save()
