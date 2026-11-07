@@ -49,7 +49,7 @@ class Credentials:
         if method == "NEW_SESSION":
             required += ["password", "totp_secret", "vendor_code", "api_secret"]
         elif method == "OAUTH":
-            required += ["vendor_code", "api_secret", "access_token"]
+            required += ["password", "totp_secret", "vendor_code", "api_secret"]
         elif method == "TOKEN":
             required += ["access_token"]
         else:
