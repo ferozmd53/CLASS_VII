@@ -1,34 +1,26 @@
-"""Start the CLASS_VII Excel trade terminal.
+"""Launch CLASS_VII using credentials stored in CLASS_VII.xlsm.
 
-Keep config.json and Finvasia_Trade_Terminal_v3.xlsm beside this file.
-Edit WORKBOOK below if your workbook has a different filename.
+Keep CLASS_VII.xlsm beside this file. Credentials are read from its
+User_Credential worksheet; no config.json is required.
 """
 from pathlib import Path
 
 from class_vii.__main__ import main
 
 ROOT = Path(__file__).resolve().parent
-CONFIG = ROOT / "config.json"
-WORKBOOK = ROOT / "Finvasia_Trade_Terminal_v3.xlsm"
+WORKBOOK = ROOT / "CLASS_VII.xlsm"
 
 
 if __name__ == "__main__":
-    if not CONFIG.exists():
-        raise SystemExit(
-            f"Missing {CONFIG}. Download config/config.example.json from the "
-            "CLASS_VII GitHub repository, save it here as config.json, "
-            "then enter your Shoonya credentials."
-        )
-    if not WORKBOOK.exists():
+    if not WORKBOOK.is_file():
         raise SystemExit(
             f"Workbook not found: {WORKBOOK}\n"
-            "Put Finvasia_Trade_Terminal_v3.xlsm beside run.py, or edit "
-            "the WORKBOOK setting in run.py."
+            "Put CLASS_VII.xlsm beside run.py."
         )
 
     raise SystemExit(
         main([
-            "--config", str(CONFIG),
+            "--credentials-workbook", str(WORKBOOK),
             "terminal",
             "--workbook", str(WORKBOOK),
         ])
