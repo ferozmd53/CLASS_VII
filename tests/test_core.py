@@ -249,3 +249,29 @@ def test_market_feed_skips_invalid_and_continues_after_failed_batch():
     assert subscribed == ["NSE|7999"]
     assert all(isinstance(item, str) for item in subscribed)
 
+
+
+def test_scanner_publishes_ltp_without_historical_data():
+    import logging
+    from class_vii.scanner import SymbolScanner
+
+    scanner = SymbolScanner.__new__(SymbolScanner)
+    scanner.keys = {"NIFTY09NOV26C25000": "NFO|12345"}
+    scanner.exchanges = {"NIFTY09NOV26C25000": "NFO"}
+    scanner.snapshots = {}
+    scanner.ticks = 0
+    scanner._signalled = {}
+    scanner.history = type("History", (), {"cache": {}})()
+    scanner.log = logging.getLogger("test.scanner.no_history")
+
+    scanner.on_tick("NFO|12345", 125.50)
+    scanner.on_tick("NFO|12345", 127.25)
+
+    row = scanner.frame().iloc[0]
+    assert scanner.ticks == 2
+    assert row["LTP"] == 127.25
+    assert row["Open"] == 125.50
+    assert row["High"] == 127.25
+    assert row["Low"] == 125.50
+    assert row["Close"] == 127.25
+    assert row["Last Update"]
