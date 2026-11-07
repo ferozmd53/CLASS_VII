@@ -18,9 +18,9 @@ CONFIG_DIR = ROOT / "config"
 DEFAULT_CONFIG_FILE = CONFIG_DIR / "config.json"
 
 # Shoonya (Finvasia) endpoints - defined exactly once for the whole package.
-API_HOST = "https://api.shoonya.com/NorenWClientTP/"
-API_WS = "wss://api.shoonya.com/NorenWSTP/"
-API_EOD = "https://api.shoonya.com/chartApi/getdata/"
+API_HOST = "https://api.shoonya.com/NorenWClientAPI/"
+API_WS = "wss://api.shoonya.com/NorenWSAPI/"
+API_EOD = "https://api.shoonya.com/chartapi/getdata/"
 INSTRUMENT_BASE = "https://api.shoonya.com/"
 
 ENV_PREFIX = "CLASS_VII_"
