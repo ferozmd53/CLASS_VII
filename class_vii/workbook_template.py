@@ -25,7 +25,7 @@ def create_workbook(path):
         else:
             ws.append(headers); ws.freeze_panes="A2"
         ws.auto_filter.ref=ws.dimensions
-        for c in ws[1]:
+        for c in ws[3 if name == "Trade_Terminal" else 1]:
             c.font=Font(bold=True,color="FFFFFF"); c.fill=PatternFill("solid",fgColor="263B5E")
             c.alignment=Alignment(horizontal="center")
         for i,h in enumerate(headers,1): ws.column_dimensions[get_column_letter(i)].width=max(12,min(24,len(str(h))+3))

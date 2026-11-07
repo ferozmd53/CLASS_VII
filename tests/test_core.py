@@ -184,3 +184,16 @@ def test_scanner_ticks_update_one_daily_candle():
     assert float(updated.iloc[-1]["high"]) == 102.0
     assert float(updated.iloc[-1]["low"]) == 98.0
     assert float(updated.iloc[-1]["close"]) == 98.0
+
+
+def test_broker_snapshots_are_read_in_paper_mode():
+    class Broker:
+        def get_order_book(self): return [{"norenordno": "123", "status": "OPEN"}]
+        def get_positions(self): return [{"tsym": "ABC-EQ", "netqty": "5"}]
+        def get_holdings(self): return [{"tsym": "ABC-EQ", "holdqty": "5"}]
+        def get_limits(self): return {"cash": "1000"}
+    gateway = OrderGateway(api=Broker(), trading=S.TradingConfig(paper_trade=True))
+    assert gateway.order_book()[0]["norenordno"] == "123"
+    assert gateway.positions()[0]["netqty"] == "5"
+    assert gateway.holdings()[0]["holdqty"] == "5"
+    assert gateway.limits()["cash"] == "1000"

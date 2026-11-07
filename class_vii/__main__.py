@@ -266,7 +266,9 @@ def _run_terminal(config: S.AppConfig, session, args, log) -> int:
     def on_tick(quote, message):
         key = f"{quote.exchange}|{quote.token}"
         scanner.on_tick(key, quote.ltp)
-        book.on_tick(key, quote.ltp)
+        symbol = scanner._symbol_for_key(key)
+        if symbol:
+            book.on_tick(f"{quote.exchange}:{symbol}", quote.ltp)
 
     feed.on_tick = on_tick
     feed.start()
