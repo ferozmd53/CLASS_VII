@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv=None) -> int:
+def main(argv=None, auth_code_callback=None) -> int:
     args = build_parser().parse_args(argv)
     config = S.AppConfig.load(args.config)
     if args.credentials_workbook:
@@ -68,7 +68,7 @@ def main(argv=None) -> int:
     if args.command == "check":
         return _check(config, log)
 
-    session = _login(config, log)
+    session = _login(config, log, auth_code_callback)
     if session is None:
         return 2
 
@@ -121,12 +121,11 @@ def _load_credentials_from_workbook(config: S.AppConfig, workbook_path: str) -> 
             "NEWSESSION": "NEW_SESSION",
             "NEW_SESSION": "NEW_SESSION",
             "OAUTH": "OAUTH",
-            "TOKEN": "TOKEN",
-            "EXISTING_TOKEN": "TOKEN",
         }
         if method not in aliases:
             raise ValueError(
-                "User_Credential!B4 must be New_Session, OAUTH or TOKEN"
+                "User_Credential!B4 must be New_Session or OAUTH. "
+                "TOKEN mode is disabled; old session tokens are never reused."
             )
 
         creds = config.credentials
@@ -138,25 +137,23 @@ def _load_credentials_from_workbook(config: S.AppConfig, workbook_path: str) -> 
             creds.totp_secret = cell_text("B5")
             creds.vendor_code = cell_text("B6")
             creds.api_secret = cell_text("B7")
-        elif creds.login_method == "OAUTH":
+        else:
             creds.password = cell_text("B3")
             creds.totp_secret = cell_text("B5")
             creds.vendor_code = cell_text("B6")
             creds.api_secret = cell_text("B7")
-            # B10 is a one-time OAuth code and is deliberately not reused.
+            # B8 is intentionally never read. A fresh OAuth session is required.
             creds.access_token = ""
-        else:
-            creds.access_token = cell_text("B8")
     finally:
         book.close()
 
     creds.validate()
 
 
-def _login(config: S.AppConfig, log):
+def _login(config: S.AppConfig, log, auth_code_callback=None):
     from .auth import LoginError, ShoonyaSession
 
-    session = ShoonyaSession(config.credentials, log)
+    session = ShoonyaSession(config.credentials, log, auth_code_callback=auth_code_callback)
     try:
         session.connect()
     except (LoginError, ValueError) as exc:
@@ -245,7 +242,7 @@ def _run_terminal(config: S.AppConfig, session, args, log) -> int:
     )
     book = PositionBook(gateway, config.trading, alerts, log)
 
-    workbook = ExcelBridge(args.workbook or config.terminal_workbook, log)
+    workbook = ExcelBridge(args.workbook or config.terminal_workbook, log, visible=True)
     if not Path(workbook.path).exists():
         log.error("workbook not found: %s", workbook.path)
         return 2
