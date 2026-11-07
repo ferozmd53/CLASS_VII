@@ -1,5 +1,7 @@
 # ---- broker API -----------------------------------------------------------
-NorenRestApiPy>=0.0.22
+NorenRestApiOAuth
+selenium>=4.15.0
+webdriver-manager>=4.0.0
 pyotp>=2.9.0
 requests>=2.31.0
 websocket_client>=1.6.0
