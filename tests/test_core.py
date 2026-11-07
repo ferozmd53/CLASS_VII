@@ -154,3 +154,33 @@ if __name__ == "__main__":
             passed += 1
             print(f"PASS {name}")
     print(f"\n{passed} tests passed")
+
+
+def test_scanner_ticks_update_one_daily_candle():
+    from datetime import datetime
+    import logging
+    from class_vii.scanner import SymbolScanner
+    scanner = SymbolScanner.__new__(SymbolScanner)
+    scanner.feed = object()
+    scanner.history = type("History", (), {})()
+    scanner.master = object()
+    scanner.config = S.ScannerConfig(bb_length=2, rsi_length=2, stoch_length=2, sma_stoch_length=1)
+    scanner.alerts = None
+    scanner.log = logging.getLogger("test.scanner")
+    scanner.keys = {"TEST-EQ": "NSE|1"}
+    scanner.snapshots = {}
+    scanner.ticks = 0
+    scanner._signalled = {}
+    today = datetime.now().date()
+    frame = pd.DataFrame([
+        {"datetime": pd.Timestamp(today)-pd.Timedelta(days=1), "open":98.0, "high":100.0, "low":97.0, "close":99.0, "volume":5},
+        {"datetime": pd.Timestamp(today), "open":100.0, "high":101.0, "low":99.0, "close":100.0, "volume":8},
+    ])
+    scanner.history.cache = {"TEST-EQ": {"frame":frame, "closes":frame.close.tolist()}}
+    scanner.on_tick("NSE|1", 102.0)
+    scanner.on_tick("NSE|1", 98.0)
+    updated = scanner.history.cache["TEST-EQ"]["frame"]
+    assert len(updated) == 2
+    assert float(updated.iloc[-1]["high"]) == 102.0
+    assert float(updated.iloc[-1]["low"]) == 98.0
+    assert float(updated.iloc[-1]["close"]) == 98.0

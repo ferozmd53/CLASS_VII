@@ -33,6 +33,7 @@ class SymbolScanner:
         self.alerts = alerts
         self.log = logger or logging.getLogger("class_vii.scanner")
         self.keys: Dict[str, str] = {}          # symbol -> "EXCH|TOKEN"
+        self.exchanges: Dict[str, str] = {}      # symbol -> exchange
         self.snapshots: Dict[str, dict] = {}    # symbol -> latest indicator snapshot
         self.ticks: int = 0
         self._signalled: Dict[str, str] = {}    # symbol -> last signal emitted
@@ -53,6 +54,7 @@ class SymbolScanner:
                 continue
             key = f"{exchange}|{token}"
             self.keys[tradingsymbol] = key
+            self.exchanges[tradingsymbol] = exchange
             subscriptions.append(key)
             added.append(tradingsymbol)
 
@@ -61,7 +63,7 @@ class SymbolScanner:
 
         # Warm indicators from daily history so the first tick is meaningful.
         for symbol in added:
-            payload = self.history.load(symbol, self.config.exchange)
+            payload = self.history.load(symbol, self.exchanges.get(symbol, self.config.exchange))
             if payload:
                 self.snapshots[symbol] = dict(payload["snapshot"])
         self.log.info("scanner tracking %s symbols", len(self.keys))
@@ -81,8 +83,22 @@ class SymbolScanner:
         if not payload:
             return None
 
-        closes = payload["closes"] + [ltp]
-        frame = pd.DataFrame({"close": closes})
+        # This cache contains DAILY candles. Update the forming daily candle;
+        # never append each incoming tick as a separate historical bar.
+        frame = payload["frame"].copy()
+        now = datetime.now()
+        today = now.date()
+        last_day = pd.to_datetime(frame["datetime"].iloc[-1]).date()
+        if last_day != today:
+            frame.loc[len(frame)] = {"datetime": now, "open": ltp, "high": ltp,
+                                     "low": ltp, "close": ltp, "volume": 0}
+        else:
+            idx = frame.index[-1]
+            high = frame.at[idx, "high"] if "high" in frame else ltp
+            low = frame.at[idx, "low"] if "low" in frame else ltp
+            frame.at[idx, "high"] = max(float(high) if pd.notna(high) else ltp, ltp)
+            frame.at[idx, "low"] = min(float(low) if pd.notna(low) else ltp, ltp)
+            frame.at[idx, "close"] = ltp
         frame = indicators.add_indicators(
             frame,
             rsi_length=self.config.rsi_length,
@@ -94,8 +110,15 @@ class SymbolScanner:
         frame = indicators.add_signals(frame, self.config.stoch_lower, self.config.stoch_upper)
 
         snapshot = indicators.snapshot(frame)
+        current = frame.iloc[-1]
+        for column in ("open", "high", "low", "close", "volume"):
+            value = current.get(column, 0.0)
+            snapshot[column] = float(value) if pd.notna(value) else 0.0
         snapshot["ltp"] = ltp
-        snapshot["updated_at"] = datetime.now()
+        snapshot["updated_at"] = now
+        payload["frame"] = frame
+        payload["closes"] = frame["close"].tolist()
+        payload["snapshot"] = snapshot
         self.snapshots[symbol] = snapshot
 
         signal = ""
@@ -134,9 +157,12 @@ class SymbolScanner:
             data = self.snapshots.get(symbol, {})
             rows.append(
                 [
-                    f"{self.config.exchange}:{symbol}",
+                    f"{self.exchanges.get(symbol, self.config.exchange)}:{symbol}",
                     round(float(data.get("ltp", 0.0) or 0.0), 2),
                     round(float(data.get("open", 0.0) or 0.0), 2),
+                    round(float(data.get("high", 0.0) or 0.0), 2),
+                    round(float(data.get("low", 0.0) or 0.0), 2),
+                    round(float(data.get("close", 0.0) or 0.0), 2),
                     round(float(data.get("rsi", 50.0) or 50.0), 2),
                     round(float(data.get("stoch_rsi", 50.0) or 50.0), 2),
                     round(float(data.get("sma_stoch", 50.0) or 50.0), 2),
@@ -152,7 +178,7 @@ class SymbolScanner:
     @staticmethod
     def headers() -> List[str]:
         return [
-            "Symbol", "LTP", "Open", "RSI", "StochRSI", "SMA Stoch",
+            "Symbol", "LTP", "Open", "High", "Low", "Close", "RSI", "StochRSI", "SMA Stoch",
             "BB Upper", "BB Middle", "BB Lower", "Signal", "Last Update",
         ]
 

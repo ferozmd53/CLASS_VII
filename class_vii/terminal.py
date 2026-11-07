@@ -61,6 +61,12 @@ class ExcelTerminal:
 
     # ------------------------------------------------------------------ #
     def attach(self) -> "ExcelTerminal":
+        required = (TERMINAL_SHEET, ORDERBOOK_SHEET, POSITION_SHEET,
+                    "BrokerPositions", "LiveIndicators", "Holdings", "Funds", "Alerts")
+        names = [s.name for s in self.book._book.sheets]
+        missing = [name for name in required if name not in names]
+        if missing:
+            raise KeyError("Workbook missing CLASS_VII sheets: " + ", ".join(missing))
         self.sheet = self.book.sheet(TERMINAL_SHEET)
         return self
 
@@ -145,42 +151,90 @@ class ExcelTerminal:
 
     # ------------------------------------------------------------------ #
     def publish_orderbook(self, gateway) -> int:
-        sheet = self.book.sheet(ORDERBOOK_SHEET, header=[
-            "Order No", "Symbol", "Qty", "Type", "Status", "Price",
-        ])
-        orders = gateway.order_book()
-        written = 0
-        for offset, order in enumerate(orders[:200]):
-            written += self.book.write_block(
-                sheet,
-                2 + offset,
-                "A",
-                [[
-                    order.get("norenordno", order.get("order_id", "")),
-                    order.get("tsym", order.get("tradingsymbol", "")),
-                    order.get("qty", order.get("quantity", "")),
-                    order.get("trantype", order.get("side", "")),
-                    order.get("status", order.get("ordstatus", "")),
-                    order.get("prc", order.get("price", "")),
-                ]],
-            )
-        return written
+        """Broker-only order view; paper orders are deliberately excluded."""
+        sheet = self.book.sheet(ORDERBOOK_SHEET)
+        headers = ["Order No", "Exchange", "Symbol", "Side", "Product", "Qty",
+                   "Filled Qty", "Pending Qty", "Order Type", "Price", "Trigger Price",
+                   "Average Price", "Status", "Remarks", "Order Time"]
+        self.book.write_row(sheet, 1, headers)
+        sheet.range("A2:O1001").clear_contents()
+        rows = []
+        for order in gateway.order_book()[:1000]:
+            rows.append([
+                order.get("norenordno", order.get("order_id", "")),
+                order.get("exch", order.get("exchange", "")),
+                order.get("tsym", order.get("tradingsymbol", "")),
+                order.get("trantype", order.get("side", "")),
+                order.get("prd", order.get("product", "")),
+                order.get("qty", order.get("quantity", "")),
+                order.get("fillshares", order.get("filled_qty", "")),
+                order.get("unfilledshares", order.get("pending_qty", "")),
+                order.get("prctyp", order.get("order_type", "")),
+                order.get("prc", order.get("price", "")),
+                order.get("trgprc", order.get("trigger_price", "")),
+                order.get("avgprc", order.get("average_price", "")),
+                order.get("status", order.get("ordstatus", "")),
+                order.get("remarks", ""),
+                order.get("norentm", order.get("order_time", "")),
+            ])
+        if rows:
+            return self.book.write_block(sheet, 2, "A", rows)
+        sheet.range("A2").value = "No broker orders returned"
+        return 0
 
-    def publish_positions(self) -> int:
+    def publish_positions(self, gateway=None) -> int:
         sheet = self.book.sheet(POSITION_SHEET)
         frame = self.positions.to_frame()
         self.book.write_row(sheet, 1, list(frame.columns))
-        return self.book.write_block(sheet, 2, "A", frame.itertuples(index=False, name=None))
+        count = self.book.write_block(sheet, 2, "A", frame.itertuples(index=False, name=None))
+        if gateway is not None:
+            broker = self.book.sheet("BrokerPositions")
+            self.book.write_row(broker, 1, ["Exchange", "Symbol", "Net Qty", "Buy Qty",
+                                           "Sell Qty", "Average Price", "LTP", "P&L", "Product"])
+            broker.range("A2:I1001").clear_contents()
+            rows = [[p.get("exch", ""), p.get("tsym", ""), p.get("netqty", ""),
+                     p.get("daybuyqty", ""), p.get("daysellqty", ""),
+                     p.get("netavgprc", p.get("buyavgprc", "")), p.get("lp", ""),
+                     p.get("urmtom", p.get("rpnl", "")), p.get("prd", "")]
+                    for p in gateway.positions()[:1000]]
+            self.book.write_block(broker, 2, "A", rows)
+        return count
+
+    def publish_account_snapshots(self, gateway) -> None:
+        """Refresh read-only broker holdings and funds sheets."""
+        holdings = self.book.sheet("Holdings")
+        self.book.write_row(holdings, 1, ["Exchange", "Symbol", "Quantity", "Average Price", "LTP", "P&L"])
+        holdings.range("A2:F1001").clear_contents()
+        rows = [[h.get("exch", ""), h.get("tsym", ""), h.get("holdqty", h.get("quantity", "")),
+                 h.get("upldprc", h.get("avgprc", "")), h.get("lp", ""),
+                 h.get("urmtom", h.get("rpnl", ""))] for h in gateway.holdings()[:1000]]
+        self.book.write_block(holdings, 2, "A", rows)
+        funds = self.book.sheet("Funds")
+        self.book.write_row(funds, 1, ["Limit", "Value"])
+        funds.range("A2:B1001").clear_contents()
+        limits = gateway.limits()
+        fund_rows = []
+        for key, value in (limits or {}).items():
+            if isinstance(value, dict):
+                fund_rows.extend([[f"{key}.{subkey}", subvalue] for subkey, subvalue in value.items()])
+            else:
+                fund_rows.append([key, value])
+        self.book.write_block(funds, 2, "A", fund_rows)
 
     # ------------------------------------------------------------------ #
-    def loop(self, gateway, interval: Optional[float] = None) -> None:
+    def loop(self, gateway, interval: Optional[float] = None, scanner=None) -> None:
         interval = interval or self.config.poll_interval
         while True:
             try:
                 self.sync()
                 self.publish()
                 self.publish_orderbook(gateway)
-                self.publish_positions()
+                self.publish_positions(gateway)
+                self.publish_account_snapshots(gateway)
+                if scanner is not None:
+                    live = self.book.sheet("LiveIndicators")
+                    live.range("A1:Z1001").clear_contents()
+                    self.book.write_frame(live, scanner.frame(), first_row=1, first_col="A")
                 self.book.save()
             except KeyboardInterrupt:
                 self.log.info("terminal stopped by user")

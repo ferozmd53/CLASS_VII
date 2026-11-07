@@ -94,7 +94,7 @@ class ExcelBridge:
         path: str,
         logger: Optional[logging.Logger] = None,
         visible: bool = False,
-        create: bool = True,
+        create: bool = False,
     ) -> None:
         self.path = path
         self.log = logger or logging.getLogger("class_vii.excel")
@@ -125,7 +125,7 @@ class ExcelBridge:
         except Exception:
             if not self._create:
                 raise
-            self.log.warning("%s not found - creating a new workbook", self.path)
+            self.log.warning("%s could not be opened; explicit create=True allows a new workbook", self.path)
             self._book = xw.Book()
             self._book.save(self.path)
         self._book.app.visible = self.visible
@@ -149,6 +149,8 @@ class ExcelBridge:
             self.open()
         names = [s.name for s in self._book.sheets]
         if name not in names:
+            if not self._create:
+                raise KeyError(f"Required worksheet {name!r} is missing from {self.path}")
             sheet = self._book.sheets.add(name, after=self._book.sheets[-1])
             self.log.info("created sheet %s", name)
         else:

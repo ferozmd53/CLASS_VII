@@ -235,3 +235,26 @@ monotonicity, PnL sign, entry/target/stop exits and paper-mode order routing.
 Educational use only. Trading through an API can lose money; the upstream
 authors and the author of this merge accept no liability. Test in paper mode
 first — `paper_trade` is `true` by default for a reason.
+
+
+## New workbook template
+
+Create a new workbook (the initializer refuses to overwrite an existing path):
+
+```bat
+py -3.14 -m class_vii init-workbook --path CLASS_VII_Terminal.xlsx
+```
+
+The template includes Dashboard, Watchlist, LiveIndicators, Trade_Terminal,
+OrderBook, OpenPosition, BrokerPositions, Holdings, Funds, Alerts and
+User_Credential. Enter account credentials yourself; no secrets are generated
+or copied. Run the terminal with:
+
+```bat
+py -3.14 -m class_vii --credentials-workbook CLASS_VII_Terminal.xlsx terminal --workbook CLASS_VII_Terminal.xlsx
+```
+
+OrderBook and BrokerPositions are read-only broker snapshots even in paper
+mode. Paper orders are not mixed into the broker OrderBook. The daily scanner
+updates today's forming OHLC candle from ticks and recalculates indicators;
+these values remain provisional until the daily candle closes.

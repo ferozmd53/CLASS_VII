@@ -34,6 +34,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("login", help="log in and print the account summary")
+    init_book = sub.add_parser("init-workbook", help="create a new CLASS_VII workbook")
+    init_book.add_argument("--path", default="CLASS_VII_Terminal.xlsx")
 
     scan = sub.add_parser("scan", help="run the multi-symbol live scanner")
     scan.add_argument("--symbols", nargs="*", help="override symbols from config")
@@ -67,6 +69,10 @@ def main(argv=None, auth_code_callback=None) -> int:
 
     if args.command == "check":
         return _check(config, log)
+    if args.command == "init-workbook":
+        from .workbook_template import create_workbook
+        print(f"Created workbook: {create_workbook(args.path)}")
+        return 0
 
     session = _login(config, log, auth_code_callback)
     if session is None:
@@ -210,7 +216,7 @@ def _run_scan(config: S.AppConfig, session, args, log) -> int:
     try:
         while deadline is None or time.time() < deadline:
             if bridge is not None:
-                sheet = bridge.sheet("Live", header=scanner.headers())
+                sheet = bridge.sheet("LiveIndicators", header=scanner.headers())
                 bridge.write_block(sheet, 2, "A", scanner.frame().itertuples(index=False, name=None))
                 bridge.save()
             if time.time() - last_print >= 10:
@@ -228,9 +234,10 @@ def _run_scan(config: S.AppConfig, session, args, log) -> int:
 
 
 def _run_terminal(config: S.AppConfig, session, args, log) -> int:
-    from .datafeed import MarketFeed
+    from .datafeed import HistoricalData, MarketFeed
     from .excel_bridge import ExcelBridge
     from .instruments import InstrumentMaster, parse_symbol
+    from .scanner import SymbolScanner
     from .orders import OrderGateway
     from .positions import PositionBook
     from .terminal import ExcelTerminal
@@ -252,21 +259,21 @@ def _run_terminal(config: S.AppConfig, session, args, log) -> int:
     master = InstrumentMaster(logger=log).load()
     feed = MarketFeed(session.api, log)
 
+    symbols = [f"{row['exchange']}:{row['symbol']}" for row in terminal.read_rows()]
+    scanner = SymbolScanner(feed, HistoricalData(session.api, config.scanner, log),
+                            master, config.scanner, alerts, log)
+
     def on_tick(quote, message):
         key = f"{quote.exchange}|{quote.token}"
+        scanner.on_tick(key, quote.ltp)
         book.on_tick(key, quote.ltp)
 
     feed.on_tick = on_tick
     feed.start()
-
-    symbols = []
-    for row in terminal.read_rows():
-        symbols.append(f"{row['exchange']}:{row['symbol']}")
-    if symbols:
-        feed.subscribe(symbols, master=master)
+    scanner.add_symbols(symbols)
 
     try:
-        terminal.loop(gateway)
+        terminal.loop(gateway, scanner=scanner)
     finally:
         feed.stop()
         workbook.close()

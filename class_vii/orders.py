@@ -210,8 +210,7 @@ class OrderGateway:
 
     # ------------------------------------------------------------------ #
     def order_book(self) -> List[dict]:
-        if self.paper:
-            return [vars(order) for order in self.paper_orders.values()]
+        """Read actual broker orders regardless of whether new orders are paper-only."""
         try:
             return self.api.get_order_book() or []
         except Exception as exc:  # noqa: BLE001
@@ -219,8 +218,7 @@ class OrderGateway:
             return []
 
     def positions(self) -> List[dict]:
-        if self.paper:
-            return []
+        """Read actual broker positions; paper mode only controls order placement."""
         try:
             return self.api.get_positions() or []
         except Exception as exc:  # noqa: BLE001
@@ -228,8 +226,6 @@ class OrderGateway:
             return []
 
     def holdings(self) -> List[dict]:
-        if self.paper:
-            return []
         try:
             return self.api.get_holdings() or []
         except Exception as exc:  # noqa: BLE001
@@ -237,8 +233,6 @@ class OrderGateway:
             return []
 
     def limits(self) -> dict:
-        if self.paper:
-            return {}
         try:
             return self.api.get_limits() or {}
         except Exception as exc:  # noqa: BLE001
