@@ -4,16 +4,34 @@
 
 ---
 
-## Install
+## Install (one command from GitHub)
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+**Windows (Python 3.14):**
+
+```bat
+py -3.14 -m pip install --upgrade "class-vii[all] @ git+https://github.com/ferozmd53/CLASS_VII.git"
 ```
 
-`xlwings` needs Microsoft Excel and only matters for `terminal` and
-`scan --excel`. Everything else runs without it.
+This installs CLASS_VII directly from GitHub, including the optional Excel and alert dependencies. Git for Windows must be installed and available on PATH.
+
+**Other Python versions / macOS / Linux:**
+
+```bash
+python -m pip install --upgrade "class-vii[all] @ git+https://github.com/ferozmd53/CLASS_VII.git"
+```
+
+To update later, run the same command again. To verify the installation:
+
+```bat
+py -3.14 -m class_vii --version
+py -3.14 -m class_vii check
+```
+
+**Install from a local clone instead:**
+
+```bash
+python -m pip install ".[all]"
+```
 
 ## Configure
 
