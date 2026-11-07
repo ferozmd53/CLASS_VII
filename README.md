@@ -209,6 +209,16 @@ written into a spreadsheet cell and re-read as the source of truth.
 `place_order`, `live_data`, and their own Excel update loop with different
 signatures. Each now exists once.
 
+## Existing workbook compatibility
+
+When opening an existing `CLASS_VII.xlsm`, the terminal preserves its
+worksheets and creates only missing output tabs (`BrokerPositions`, `Funds`,
+and `Alerts`). If the workbook already has a legacy `Live` tab but no
+`LiveIndicators` tab, live indicator rows are written to `Live`; no duplicate
+tab is created. The operational `Trade_Terminal`, `OrderBook`,
+`OpenPosition`, and `Holdings` tabs must already exist. The initializer is
+for a new workbook only and must not be run over an existing workbook.
+
 ## Known limitations
 
 - `option_chain.py` centres the strike window on an approximation until the first
