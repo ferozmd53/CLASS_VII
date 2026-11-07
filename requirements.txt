@@ -1,0 +1,16 @@
+# ---- broker API -----------------------------------------------------------
+NorenRestApiPy>=0.0.22
+pyotp>=2.9.0
+requests>=2.31.0
+websocket_client>=1.6.0
+
+# ---- data ---------------------------------------------------------------
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+
+# ---- Excel bridge (optional; needed for scan --excel and terminal) -------
+xlwings>=0.30.0
+
+# ---- alerts (optional) ---------------------------------------------------
+pyttsx3>=2.90; platform_system == "Windows"

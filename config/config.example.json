@@ -1,0 +1,47 @@
+{
+  "credentials": {
+    "user_id": "FA00000",
+    "password": "YOUR_PASSWORD",
+    "totp_secret": "YOUR_BASE32_TOTP_SECRET",
+    "vendor_code": "FA00000_U",
+    "api_secret": "YOUR_API_SECRET",
+    "imei": "abcd1234",
+    "login_method": "NEW_SESSION",
+    "access_token": "",
+    "account_id": "FA00000"
+  },
+  "trading": {
+    "product_type": "C",
+    "quantity": 1,
+    "order_type": "LIMIT",
+    "price_buffer_pct": 1.0,
+    "tick_size": 0.05,
+    "target_pct": 1.0,
+    "stop_loss_pct": 0.5,
+    "trail_enabled": true,
+    "trail_step_pct": 0.2,
+    "paper_trade": true,
+    "poll_interval": 1.0
+  },
+  "scanner": {
+    "exchange": "NSE",
+    "symbols": ["RELIANCE-EQ", "TCS-EQ", "INFY-EQ", "HDFCBANK-EQ", "SBIN-EQ"],
+    "load_days": 500,
+    "rsi_length": 14,
+    "stoch_length": 14,
+    "stoch_upper": 70.0,
+    "stoch_lower": 30.0,
+    "bb_length": 20,
+    "bb_std": 2.0,
+    "sma_stoch_length": 3,
+    "excel_update_interval": 0.5,
+    "workbook": "class_vii_scanner.xlsx"
+  },
+  "alerts": {
+    "telegram_token": "",
+    "telegram_chat_id": "",
+    "voice": false,
+    "log_dir": "logs"
+  },
+  "terminal_workbook": "Finvasia_Trade_Terminal_v3.xlsm"
+}

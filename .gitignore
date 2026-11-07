@@ -1,0 +1,23 @@
+# secrets & runtime output
+config/config.json
+logs/
+Instrument/
+*.log
+*.xlsx.bak
+
+# Excel lock files
+~$*
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# editor / OS
+.idea/
+.vscode/
+.DS_Store

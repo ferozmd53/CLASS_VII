@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "class-vii"
+version = "1.0.0"
+description = "Merged Shoonya (Finvasia) Excel trade terminal + multi-symbol live/historical indicator scanner"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "class_vii contributors" }]
+dependencies = [
+  "NorenRestApiPy>=0.0.22",
+  "pyotp>=2.9.0",
+  "requests>=2.31.0",
+  "websocket_client>=1.6.0",
+  "pandas>=2.0.0",
+  "numpy>=1.24.0",
+  "openpyxl>=3.1.0",
+]
+
+[project.optional-dependencies]
+excel = ["xlwings>=0.30.0"]
+alerts = ["pyttsx3>=2.90"]
+all = ["xlwings>=0.30.0", "pyttsx3>=2.90"]
+
+[project.scripts]
+class_vii = "class_vii.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["class_vii*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
