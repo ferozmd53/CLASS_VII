@@ -154,3 +154,124 @@ if __name__ == "__main__":
             passed += 1
             print(f"PASS {name}")
     print(f"\n{passed} tests passed")
+
+
+def test_scanner_ticks_update_one_daily_candle():
+    from datetime import datetime
+    import logging
+    from class_vii.scanner import SymbolScanner
+    scanner = SymbolScanner.__new__(SymbolScanner)
+    scanner.feed = object()
+    scanner.history = type("History", (), {})()
+    scanner.master = object()
+    scanner.config = S.ScannerConfig(bb_length=2, rsi_length=2, stoch_length=2, sma_stoch_length=1)
+    scanner.alerts = None
+    scanner.log = logging.getLogger("test.scanner")
+    scanner.keys = {"TEST-EQ": "NSE|1"}
+    scanner.snapshots = {}
+    scanner.ticks = 0
+    scanner._signalled = {}
+    today = datetime.now().date()
+    frame = pd.DataFrame([
+        {"datetime": pd.Timestamp(today)-pd.Timedelta(days=1), "open":98.0, "high":100.0, "low":97.0, "close":99.0, "volume":5},
+        {"datetime": pd.Timestamp(today), "open":100.0, "high":101.0, "low":99.0, "close":100.0, "volume":8},
+    ])
+    scanner.history.cache = {"TEST-EQ": {"frame":frame, "closes":frame.close.tolist()}}
+    scanner.on_tick("NSE|1", 102.0)
+    scanner.on_tick("NSE|1", 98.0)
+    updated = scanner.history.cache["TEST-EQ"]["frame"]
+    assert len(updated) == 2
+    assert float(updated.iloc[-1]["high"]) == 102.0
+    assert float(updated.iloc[-1]["low"]) == 98.0
+    assert float(updated.iloc[-1]["close"]) == 98.0
+
+
+def test_broker_snapshots_are_read_in_paper_mode():
+    class Broker:
+        def get_order_book(self): return [{"norenordno": "123", "status": "OPEN"}]
+        def get_positions(self): return [{"tsym": "ABC-EQ", "netqty": "5"}]
+        def get_holdings(self): return [{"tsym": "ABC-EQ", "holdqty": "5"}]
+        def get_limits(self): return {"cash": "1000"}
+    gateway = OrderGateway(api=Broker(), trading=S.TradingConfig(paper_trade=True))
+    assert gateway.order_book()[0]["norenordno"] == "123"
+    assert gateway.positions()[0]["netqty"] == "5"
+    assert gateway.holdings()[0]["holdqty"] == "5"
+    assert gateway.limits()["cash"] == "1000"
+
+
+def test_workbook_template_has_required_sheets_and_refuses_overwrite(tmp_path):
+    from openpyxl import load_workbook
+    from class_vii.workbook_template import create_workbook
+    path = tmp_path / "CLASS_VII_Terminal.xlsx"
+    create_workbook(path)
+    wb = load_workbook(path, read_only=True)
+    assert {"Dashboard", "Watchlist", "LiveIndicators", "Trade_Terminal",
+            "OrderBook", "OpenPosition", "BrokerPositions", "Holdings",
+            "Funds", "Alerts", "User_Credential"}.issubset(set(wb.sheetnames))
+    assert wb["Trade_Terminal"]["A3"].value == "Symbol"
+    wb.close()
+    try:
+        create_workbook(path)
+    except FileExistsError:
+        pass
+    else:
+        raise AssertionError("template initializer overwrote an existing workbook")
+
+def test_market_feed_skips_invalid_and_continues_after_failed_batch():
+    import logging
+    from class_vii.datafeed import MarketFeed
+
+    class FakeApi:
+        def __init__(self):
+            self.calls = []
+        def subscribe(self, instruments):
+            assert all(isinstance(item, str) for item in instruments)
+            self.calls.append(list(instruments))
+            if len(self.calls) == 1:
+                raise RuntimeError("simulated batch failure")
+
+    class FakeMaster:
+        def token_for(self, exchange, symbol):
+            return None
+
+    api = FakeApi()
+    feed = MarketFeed(api, logger=logging.getLogger("test.feed"))
+    symbols = [
+        {"exchange": "NSE", "token": str(7000 + i)}
+        for i in range(10)
+    ]
+    symbols.extend(["NSE|7999", "MCX:NATURALGAS28MAR23"])
+    subscribed = feed.subscribe(symbols, master=FakeMaster())
+
+    assert len(api.calls) == 2
+    assert api.calls[0] == [f"NSE|{7000 + i}" for i in range(10)]
+    assert api.calls[1] == ["NSE|7999"]
+    assert subscribed == ["NSE|7999"]
+    assert all(isinstance(item, str) for item in subscribed)
+
+
+
+def test_scanner_publishes_ltp_without_historical_data():
+    import logging
+    from class_vii.scanner import SymbolScanner
+
+    scanner = SymbolScanner.__new__(SymbolScanner)
+    scanner.keys = {"NIFTY09NOV26C25000": "NFO|12345"}
+    scanner.exchanges = {"NIFTY09NOV26C25000": "NFO"}
+    scanner.snapshots = {}
+    scanner.ticks = 0
+    scanner._signalled = {}
+    scanner.history = type("History", (), {"cache": {}})()
+    scanner.log = logging.getLogger("test.scanner.no_history")
+
+    scanner.on_tick("NFO|12345", 125.50)
+    scanner.on_tick("NFO|12345", 127.25)
+
+    row = scanner.frame().iloc[0]
+    assert scanner.ticks == 2
+    assert row["LTP"] == 127.25
+    assert row["Open"] == 125.50
+    assert row["High"] == 127.25
+    assert row["Low"] == 125.50
+    assert row["Close"] == 127.25
+    assert row["Last Update"]

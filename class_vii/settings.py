@@ -133,7 +133,7 @@ class AppConfig:
     trading: TradingConfig = field(default_factory=TradingConfig)
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
     alerts: AlertConfig = field(default_factory=AlertConfig)
-    terminal_workbook: str = "Finvasia_Trade_Terminal_v3.xlsm"
+    terminal_workbook: str = "CLASS_VII_Terminal.xlsx"
 
     # -- loading ---------------------------------------------------------- #
     @classmethod
@@ -150,7 +150,7 @@ class AppConfig:
             scanner=ScannerConfig(**raw.get("scanner", {})),
             alerts=AlertConfig(**raw.get("alerts", {})),
             terminal_workbook=raw.get(
-                "terminal_workbook", "Finvasia_Trade_Terminal_v3.xlsm"
+                "terminal_workbook", "CLASS_VII_Terminal.xlsx"
             ),
         )
         config._apply_env()

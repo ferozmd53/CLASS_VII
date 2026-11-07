@@ -58,9 +58,45 @@ class ExcelTerminal:
         self.config = trading
         self.log = logger or logging.getLogger("class_vii.terminal")
         self.sheet = None
+        self.live_sheet = None
 
     # ------------------------------------------------------------------ #
     def attach(self) -> "ExcelTerminal":
+        """Attach to the user's workbook without replacing or rearranging it.
+
+        Trade_Terminal, OrderBook, OpenPosition and Holdings are existing
+        operational sheets and must already be present. Output-only sheets
+        are added only when absent. An existing legacy "Live" sheet is reused
+        for live indicators rather than creating a duplicate tab.
+        """
+        names = [s.name for s in self.book._book.sheets]
+        required = (TERMINAL_SHEET, ORDERBOOK_SHEET, POSITION_SHEET, "Holdings")
+        missing = [name for name in required if name not in names]
+        if missing:
+            raise KeyError(
+                "Workbook is missing required trading sheets: " + ", ".join(missing)
+                + ". Existing sheets were not changed."
+            )
+
+        # Create only missing output tabs; never clear, rename or replace
+        # any existing worksheet, formulas, macros or credential cells.
+        for name in ("BrokerPositions", "Funds", "Alerts"):
+            if name not in names:
+                self.book._book.sheets.add(name, after=self.book._book.sheets[-1])
+                names.append(name)
+                self.log.info("created missing output worksheet: %s", name)
+
+        if "LiveIndicators" in names:
+            self.live_sheet = self.book.sheet("LiveIndicators")
+        elif "Live" in names:
+            self.live_sheet = self.book.sheet("Live")
+            self.log.info("using existing Live worksheet for live indicator output")
+        else:
+            self.live_sheet = self.book._book.sheets.add(
+                "LiveIndicators", after=self.book._book.sheets[-1]
+            )
+            self.log.info("created missing output worksheet: LiveIndicators")
+
         self.sheet = self.book.sheet(TERMINAL_SHEET)
         return self
 
@@ -145,48 +181,129 @@ class ExcelTerminal:
 
     # ------------------------------------------------------------------ #
     def publish_orderbook(self, gateway) -> int:
-        sheet = self.book.sheet(ORDERBOOK_SHEET, header=[
-            "Order No", "Symbol", "Qty", "Type", "Status", "Price",
-        ])
-        orders = gateway.order_book()
-        written = 0
-        for offset, order in enumerate(orders[:200]):
-            written += self.book.write_block(
-                sheet,
-                2 + offset,
-                "A",
-                [[
-                    order.get("norenordno", order.get("order_id", "")),
-                    order.get("tsym", order.get("tradingsymbol", "")),
-                    order.get("qty", order.get("quantity", "")),
-                    order.get("trantype", order.get("side", "")),
-                    order.get("status", order.get("ordstatus", "")),
-                    order.get("prc", order.get("price", "")),
-                ]],
-            )
-        return written
+        """Broker-only order view; paper orders are deliberately excluded."""
+        sheet = self.book.sheet(ORDERBOOK_SHEET)
+        headers = ["Order No", "Exchange", "Symbol", "Side", "Product", "Qty",
+                   "Filled Qty", "Pending Qty", "Order Type", "Price", "Trigger Price",
+                   "Average Price", "Status", "Remarks", "Order Time"]
+        self.book.write_row(sheet, 1, headers)
+        sheet.range("A2:O1001").clear_contents()
+        rows = []
+        for order in gateway.order_book()[:1000]:
+            rows.append([
+                order.get("norenordno", order.get("order_id", "")),
+                order.get("exch", order.get("exchange", "")),
+                order.get("tsym", order.get("tradingsymbol", "")),
+                order.get("trantype", order.get("side", "")),
+                order.get("prd", order.get("product", "")),
+                order.get("qty", order.get("quantity", "")),
+                order.get("fillshares", order.get("filled_qty", "")),
+                order.get("unfilledshares", order.get("pending_qty", "")),
+                order.get("prctyp", order.get("order_type", "")),
+                order.get("prc", order.get("price", "")),
+                order.get("trgprc", order.get("trigger_price", "")),
+                order.get("avgprc", order.get("average_price", "")),
+                order.get("status", order.get("ordstatus", "")),
+                order.get("remarks", ""),
+                order.get("norentm", order.get("order_time", "")),
+            ])
+        if rows:
+            return self.book.write_block(sheet, 2, "A", rows)
+        sheet.range("A2").value = "No broker orders returned"
+        return 0
 
-    def publish_positions(self) -> int:
+    def publish_positions(self, gateway=None) -> int:
         sheet = self.book.sheet(POSITION_SHEET)
         frame = self.positions.to_frame()
         self.book.write_row(sheet, 1, list(frame.columns))
-        return self.book.write_block(sheet, 2, "A", frame.itertuples(index=False, name=None))
+        count = self.book.write_block(sheet, 2, "A", frame.itertuples(index=False, name=None))
+        if gateway is not None:
+            broker = self.book.sheet("BrokerPositions")
+            self.book.write_row(broker, 1, ["Exchange", "Symbol", "Net Qty", "Buy Qty",
+                                           "Sell Qty", "Average Price", "LTP", "P&L", "Product"])
+            broker.range("A2:I1001").clear_contents()
+            rows = [[p.get("exch", ""), p.get("tsym", ""), p.get("netqty", ""),
+                     p.get("daybuyqty", ""), p.get("daysellqty", ""),
+                     p.get("netavgprc", p.get("buyavgprc", "")), p.get("lp", ""),
+                     p.get("urmtom", p.get("rpnl", "")), p.get("prd", "")]
+                    for p in gateway.positions()[:1000]]
+            self.book.write_block(broker, 2, "A", rows)
+        return count
+
+    def publish_account_snapshots(self, gateway) -> None:
+        """Refresh read-only broker holdings and funds sheets."""
+        holdings = self.book.sheet("Holdings")
+        self.book.write_row(holdings, 1, ["Exchange", "Symbol", "Quantity", "Average Price", "LTP", "P&L"])
+        holdings.range("A2:F1001").clear_contents()
+        rows = [[h.get("exch", ""), h.get("tsym", ""), h.get("holdqty", h.get("quantity", "")),
+                 h.get("upldprc", h.get("avgprc", "")), h.get("lp", ""),
+                 h.get("urmtom", h.get("rpnl", ""))] for h in gateway.holdings()[:1000]]
+        self.book.write_block(holdings, 2, "A", rows)
+        funds = self.book.sheet("Funds")
+        self.book.write_row(funds, 1, ["Limit", "Value"])
+        funds.range("A2:B1001").clear_contents()
+        limits = gateway.limits()
+        fund_rows = []
+        for key, value in (limits or {}).items():
+            if isinstance(value, dict):
+                fund_rows.extend([[f"{key}.{subkey}", subvalue] for subkey, subvalue in value.items()])
+            else:
+                fund_rows.append([key, value])
+        self.book.write_block(funds, 2, "A", fund_rows)
 
     # ------------------------------------------------------------------ #
-    def loop(self, gateway, interval: Optional[float] = None) -> None:
+    def loop(self, gateway, interval: Optional[float] = None, scanner=None) -> None:
         interval = interval or self.config.poll_interval
+        last_feed_report = 0.0
         while True:
             try:
                 self.sync()
-                self.publish()
-                self.publish_orderbook(gateway)
-                self.publish_positions()
-                self.book.save()
             except KeyboardInterrupt:
                 self.log.info("terminal stopped by user")
                 return
-            except Exception as exc:  # noqa: BLE001 - workbook calls are fragile
-                self.log.exception("terminal cycle failed: %s", exc)
+            except Exception as exc:  # noqa: BLE001
+                self.log.exception("terminal input sync failed: %s", exc)
+
+            # Market data has priority. Do not let a busy Excel sheet or a
+            # failed broker REST request prevent the live quote sheet saving.
+            if scanner is not None:
+                try:
+                    live = self.live_sheet or self.book.sheet("LiveIndicators")
+                    # The scanner has a stable symbol set; overwrite its used
+                    # block instead of clearing 1,000 rows on every cycle.
+                    self.book.write_frame(live, scanner.frame(), first_row=1, first_col="A")
+                    self.book.save()
+                    now = time.monotonic()
+                    if now - last_feed_report >= 15:
+                        live_count = sum(
+                            1 for value in scanner.snapshots.values()
+                            if float(value.get("ltp", 0) or 0) > 0
+                        )
+                        self.log.info(
+                            "live feed status: received_ticks=%s, tracked_symbols=%s, symbols_with_ltp=%s",
+                            scanner.ticks, len(scanner.keys), live_count
+                        )
+                        last_feed_report = now
+                except Exception as exc:  # noqa: BLE001
+                    self.log.exception("live Excel update failed: %s", exc)
+
+            # Keep broker/account sheets independent. Excel can temporarily
+            # reject COM calls with OLE 0x800AC472 while the user is editing.
+            for label, operation in (
+                ("trade terminal publish", self.publish),
+                ("order book refresh", lambda: self.publish_orderbook(gateway)),
+                ("positions refresh", lambda: self.publish_positions(gateway)),
+                ("holdings/funds refresh", lambda: self.publish_account_snapshots(gateway)),
+            ):
+                try:
+                    operation()
+                except KeyboardInterrupt:
+                    self.log.info("terminal stopped by user")
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    self.log.warning("%s skipped this cycle: %s", label, exc)
+
+            self.book.save()
             time.sleep(interval)
 
 

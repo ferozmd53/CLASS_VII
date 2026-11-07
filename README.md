@@ -209,6 +209,16 @@ written into a spreadsheet cell and re-read as the source of truth.
 `place_order`, `live_data`, and their own Excel update loop with different
 signatures. Each now exists once.
 
+## Existing workbook compatibility
+
+When opening an existing `CLASS_VII.xlsm`, the terminal preserves its
+worksheets and creates only missing output tabs (`BrokerPositions`, `Funds`,
+and `Alerts`). If the workbook already has a legacy `Live` tab but no
+`LiveIndicators` tab, live indicator rows are written to `Live`; no duplicate
+tab is created. The operational `Trade_Terminal`, `OrderBook`,
+`OpenPosition`, and `Holdings` tabs must already exist. The initializer is
+for a new workbook only and must not be run over an existing workbook.
+
 ## Known limitations
 
 - `option_chain.py` centres the strike window on an approximation until the first
@@ -235,3 +245,26 @@ monotonicity, PnL sign, entry/target/stop exits and paper-mode order routing.
 Educational use only. Trading through an API can lose money; the upstream
 authors and the author of this merge accept no liability. Test in paper mode
 first — `paper_trade` is `true` by default for a reason.
+
+
+## New workbook template
+
+Create a new workbook (the initializer refuses to overwrite an existing path):
+
+```bat
+py -3.14 -m class_vii init-workbook --path CLASS_VII_Terminal.xlsx
+```
+
+The template includes Dashboard, Watchlist, LiveIndicators, Trade_Terminal,
+OrderBook, OpenPosition, BrokerPositions, Holdings, Funds, Alerts and
+User_Credential. Enter account credentials yourself; no secrets are generated
+or copied. Run the terminal with:
+
+```bat
+py -3.14 -m class_vii --credentials-workbook CLASS_VII_Terminal.xlsx terminal --workbook CLASS_VII_Terminal.xlsx
+```
+
+OrderBook and BrokerPositions are read-only broker snapshots even in paper
+mode. Paper orders are not mixed into the broker OrderBook. The daily scanner
+updates today's forming OHLC candle from ticks and recalculates indicators;
+these values remain provisional until the daily candle closes.
