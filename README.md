@@ -65,16 +65,18 @@ Enter your Shoonya details in the existing `User_Credential` worksheet:
 |---|---|
 | B2 | Shoonya User ID |
 | B3 | Password |
-| B4 | Login method: `New_Session`, `OAUTH` or `TOKEN` |
-| B5 | TOTP secret / supported 6-digit PIN (New_Session) |
-| B6 | Vendor code |
-| B7 | API secret |
-| B8 | Existing session token (TOKEN method) |
-| B10 | OAuth auth code (OAUTH method) |
+| B4 | Login method: `New_Session` (recommended) or `OAUTH` |
+| B5 | TOTP secret (used by the browser login) |
+| B6 | Client ID / vendor code (for example, ending in `_U`) |
+| B7 | API Secret / Secret Code |
+| B8 | Existing session token (legacy TOKEN method only) |
+| B10 | Not used; OAuth codes are captured fresh and are single-use |
 
-For `New_Session`, fill B2:B7 as applicable. For `OAUTH`, fill B2, B4, B6, B7
-and B10. For `TOKEN`, fill B2, B4 and B8. Keep these credentials private;
-do not commit your filled workbook to GitHub.
+For `New_Session` or `OAUTH`, fill B2:B7. The launcher opens Shoonya's hosted
+OAuth login in Chrome, captures a fresh one-time code, exchanges it for a session,
+and then starts the terminal. B10 is not reused. The Client ID's public IP must
+be whitelisted in Shoonya API Key Generation. For `TOKEN`, fill B2, B4 and B8.
+Keep these credentials private; do not commit your filled workbook to GitHub.
 
 ### 4. Start the terminal
 
@@ -162,11 +164,11 @@ class_vii/
 
 ## What changed, and why
 
-**Login.** repo 1 built `login(userid, password, twoFA, vendor_code, api_secret)`
-and read cells `B2..B8`; repo 2 scraped an OAuth code from a Selenium window into
-`B7` and called `getAccessToken`. They cannot both own the session. `auth.py`
-supports both methods plus plain `susertoken` reuse, selected by
-`credentials.login_method`, with retry/backoff. The main launcher reads credentials from `User_Credential` in `CLASS_VII.xlsm`.
+**Login.** Shoonya's current supported flow is OAuth. `auth.py` opens the hosted
+Shoonya login in Chrome, enters the workbook login details, captures a fresh
+one-time authorization code, exchanges it through the OAuth SDK, and injects the
+session token. It does not reuse B10 because authorization codes are single-use.
+The main launcher reads credentials from `User_Credential` in `CLASS_VII.xlsm`.
 
 **Credentials.** repo 1 printed the userid, password and api_secret straight to
 console *and* to the log file
