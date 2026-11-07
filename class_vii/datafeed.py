@@ -132,45 +132,70 @@ class MarketFeed:
     # -- subscriptions --------------------------------------------------- #
     def subscribe(self, symbols: Iterable[str], exchange: Optional[str] = None,
                   master: Optional[InstrumentMaster] = None) -> List[str]:
-        """Subscribe symbols; returns the tokens that were accepted."""
+        """Subscribe valid instruments; skip bad symbols and isolate failed batches.
+
+        Shoonya NorenApi expects strings like ["NSE|2885"]. For compatibility
+        with older callers, dictionary items containing exchange/token are
+        normalised to that string format before they reach the API.
+        """
         instruments: List[str] = []
-        accepted: List[str] = []
+        seen = set()
+
         for raw in symbols:
-            exch, rest = parse_symbol(raw) if exchange is None else (exchange, raw)
-            exch, rest = exch.upper(), str(rest).strip()
-            token = rest if rest.isdigit() else None
-            if token is None and master is not None:
-                token = master.token_for(exch, rest)
-            if not token:
-                self.log.warning("cannot resolve %s:%s to a token", exch, rest)
-                continue
-            instruments.append(f"{exch}|{token}")
-            accepted.append(f"{exch}|{token}")
-            with self._lock:
-                self.quotes.setdefault(f"{exch}|{token}", Quote())
+            try:
+                if isinstance(raw, dict):
+                    exch = raw.get("exchange") or raw.get("e") or exchange
+                    rest = (raw.get("token") or raw.get("tk") or
+                            raw.get("tradingsymbol") or raw.get("symbol") or "")
+                    if not exch:
+                        self.log.warning("skipping symbol without exchange: %s", raw)
+                        continue
+                else:
+                    exch, rest = parse_symbol(raw) if exchange is None else (exchange, raw)
+
+                exch = str(exch).strip().upper()
+                rest = str(rest).strip()
+                if not exch or not rest:
+                    self.log.warning("skipping empty instrument: %s", raw)
+                    continue
+
+                token = rest if rest.isdigit() else None
+                if token is None and master is not None:
+                    token = master.token_for(exch, rest)
+                if not token:
+                    self.log.warning("skipping unresolved symbol %s:%s", exch, rest)
+                    continue
+
+                key = f"{exch}|{token}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                instruments.append(key)
+                with self._lock:
+                    self.quotes.setdefault(key, Quote())
+            except Exception as exc:  # noqa: BLE001 - skip malformed row, keep processing
+                self.log.warning("skipping invalid instrument %r: %s", raw, exc)
 
         subscribed: List[str] = []
+        failed: List[str] = []
         for chunk in _chunks(instruments, 10):
             try:
-                # Shoonya NorenApi expects ["NSE|2885", ...], not dictionaries.
-                self.api.subscribe(chunk)
+                # Never pass dictionaries to NorenApi.subscribe().
+                self.api.subscribe(list(chunk))
                 subscribed.extend(chunk)
                 self._subscribed.extend(
                     tuple(item.split("|", 1)) for item in chunk
+                    if tuple(item.split("|", 1)) not in self._subscribed
                 )
-            except Exception as exc:  # noqa: BLE001
-                self.log.error("subscribe failed for %s: %s", chunk, exc)
+            except Exception as exc:  # noqa: BLE001 - continue with later batches
+                failed.extend(chunk)
+                self.log.error("subscription batch skipped (%s instruments): %s", len(chunk), exc)
             time.sleep(0.1)
 
         self.log.info(
-            "websocket subscription accepted %s/%s resolved instruments",
-            len(subscribed), len(instruments)
+            "websocket subscriptions: %s succeeded, %s failed, %s unresolved/skipped",
+            len(subscribed), len(failed), len(symbols) - len(instruments)
         )
-        if len(instruments) != len(accepted):
-            self.log.warning(
-                "resolved instrument count mismatch: %s accepted keys / %s instruments",
-                len(accepted), len(instruments)
-            )
         return subscribed
 
     def unsubscribe_all(self) -> None:
