@@ -14,6 +14,14 @@ from .datafeed import HistoricalData, MarketFeed
 from .instruments import InstrumentMaster, parse_symbol
 
 
+def _number(value) -> float:
+    try:
+        number = float(value)
+        return number if pd.notna(number) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 class SymbolScanner:
     """Tracks a basket of symbols and computes live indicator snapshots."""
 
@@ -162,15 +170,7 @@ class SymbolScanner:
 
         return signal or None
 
-    def _number(value) -> float:
-    try:
-        number = float(value)
-        return number if pd.notna(number) else 0.0
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _symbol_for_key(self, key: str) -> Optional[str]:
+    def _symbol_for_key(self, key: str) -> Optional[str]:
         for symbol, symbol_key in self.keys.items():
             if symbol_key == key:
                 return symbol
